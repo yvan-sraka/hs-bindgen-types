@@ -210,6 +210,15 @@ where
     }
 }
 
+impl<T> ReprHs for *mut T
+where
+    T: ReprHs,
+{
+    fn into() -> HsType {
+        HsType::Ptr(Box::new(T::into()))
+    }
+}
+
 /* ********** Vector & Slices ********** */
 
 impl<T> ReprHs for Vec<T>
