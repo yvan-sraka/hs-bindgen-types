@@ -3,6 +3,7 @@ use displaydoc::Display;
 use proc_macro2::TokenStream;
 use quote::quote;
 use thiserror::Error;
+use cfg_if::cfg_if;
 
 /// Enumeration of all Haskell C-FFI safe types as the string representation of
 /// their token in Haskell.
@@ -192,13 +193,25 @@ repr_hs! {
     c_double => CDouble,
     c_float  => CFloat,
     c_int    => CInt,
-    c_long   => CLong,
     c_short  => CShort,
     c_uchar  => CUChar,
     c_uint   => CUInt,
-    c_ulong  => CULong,
     c_ushort => CUShort,
     ()       => Empty,
+}
+
+cfg_if! {
+    if #[cfg(all(target_pointer_width = "64", not(windows)))] {
+        repr_hs! {
+            c_long  => CLong,
+            c_ulong => CULong,
+        }
+    } else {
+        repr_hs! {
+            c_longlong  => CLLong,
+            c_ulonglong => CULLong,
+        }
+    }
 }
 
 impl<T> ReprHs for *const T
