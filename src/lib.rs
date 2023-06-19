@@ -49,6 +49,8 @@ pub enum HsType {
     Ptr(Box<HsType>),
     /// `IO T`
     IO(Box<HsType>),
+    /// FunPtr (S -> T)
+    FunPtr(Vec<HsType>),
 }
 
 impl std::fmt::Display for HsType {
@@ -75,6 +77,10 @@ impl std::fmt::Display for HsType {
                 HsType::Empty => "()".to_string(),
                 HsType::Ptr(x) => format!("Ptr ({x})"),
                 HsType::IO(x) => format!("IO ({x})"),
+                HsType::FunPtr(types) => {
+                    let args: Vec<String> = types.iter().map(|arg| format!("{arg}")).collect();
+                    format!("FunPtr({})", args.join(" -> "))
+                }
             }
         )
     }
@@ -91,6 +97,53 @@ pub enum Error {
     UnsupportedHsType(String),
     /// found an open `(` without the matching closing `)`
     UnmatchedParenthesis,
+    /// FunPtr is missing type parameter
+    FunPtrWithoutTypeArgument,
+}
+
+pub struct ArrowIter<'a> {
+    remaining: &'a str,
+}
+
+impl<'a> Iterator for ArrowIter<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ArrowIter { remaining } = self;
+
+        let mut open = 0;
+        let mut offset = 0;
+
+        if remaining.trim().is_empty() {
+            return None;
+        }
+
+        let mut matched: &str = "";
+
+        for c in remaining.chars() {
+            if c == '(' {
+                open += 1;
+            } else if c == ')' {
+                open -= 1;
+            } else if open == 0 && remaining[offset..].starts_with("->") {
+                matched = &remaining[..offset];
+                offset += "->".len();
+                break;
+            }
+
+            offset += c.len_utf8();
+            matched = &remaining[..offset];
+        }
+
+        *remaining = &remaining[offset..];
+        Some(matched)
+    }
+}
+
+impl<'a> From<&'a str> for ArrowIter<'a> {
+    fn from(value: &'a str) -> Self {
+        Self { remaining: value }
+    }
 }
 
 impl std::str::FromStr for HsType {
@@ -109,6 +162,24 @@ impl std::str::FromStr for HsType {
             Ok(HsType::IO(Box::new(s[2..].parse()?)))
         } else if s.len() >= 3 && &s[..3] == "Ptr" {
             Ok(HsType::Ptr(Box::new(s[3..].parse()?)))
+        } else if s.len() >= 6 && &s[..6] == "FunPtr" {
+            let mut s = s[6..].trim();
+
+            if let Some('(') = s.chars().next() {
+                s = s[1..]
+                    .strip_suffix(')')
+                    .ok_or(Error::UnmatchedParenthesis)?;
+            }
+
+            let types: Vec<_> = ArrowIter { remaining: s }
+                .map(|s| s.parse::<Self>())
+                .collect::<Result<_, _>>()?;
+
+            if types.is_empty() {
+                return Err(Error::FunPtrWithoutTypeArgument);
+            }
+
+            Ok(HsType::FunPtr(types))
         } else {
             match s {
                 "CBool" => Ok(HsType::CBool),
@@ -164,6 +235,14 @@ impl HsType {
                 quote! { *const #ty }
             }
             HsType::IO(x) => x.quote(),
+            HsType::FunPtr(types) => {
+                let ret = types.last().unwrap().quote();
+                let args: Vec<_> = types[..types.len() - 1]
+                    .iter()
+                    .map(|arg| arg.quote())
+                    .collect();
+                quote!(unsafe extern "C" fn(#(#args),*) -> #ret)
+            }
         }
     }
 }
