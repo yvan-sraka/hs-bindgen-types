@@ -1,9 +1,9 @@
+use cfg_if::cfg_if;
 use core::ffi::*;
 use displaydoc::Display;
 use proc_macro2::TokenStream;
 use quote::quote;
 use thiserror::Error;
-use cfg_if::cfg_if;
 
 /// Enumeration of all Haskell C-FFI safe types as the string representation of
 /// their token in Haskell.
