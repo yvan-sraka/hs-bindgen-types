@@ -250,7 +250,7 @@ impl HsType {
 /// Turn a given Rust type into his `HsType` target.
 ///
 /// Deducing what's the right Haskell type target given an arbitrary Rust type
-/// is provided by `antlion` feature of `hs-bingen-derive` and rely mostly on
+/// is provided by `reflexive` feature of `hs-bingen-derive` and rely mostly on
 /// Rust type inference through this trait.
 pub trait ReprHs {
     fn into() -> HsType;
